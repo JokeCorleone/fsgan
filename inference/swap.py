@@ -81,7 +81,7 @@ d = parser.get_default
 
 class FaceSwapping(VideoProcessBase):
     def __init__(self, resolution=d('resolution'), crop_scale=d('crop_scale'), gpus=d('gpus'),
-        cpu_only=d('cpu_only'), display=d('display'), verbose=d('verbose'),
+        cpu_only=d('cpu_only'), display=d('display'), verbose=d('verbose'), encoder_codec=d('encoder_codec'),
         # Detection arguments:
         detection_model=d('detection_model'), det_batch_size=d('det_batch_size'), det_postfix=d('det_postfix'),
         # Sequence arguments:
@@ -107,7 +107,7 @@ class FaceSwapping(VideoProcessBase):
         blending_model=d('blending_model'), criterion_id=d('criterion_id'), min_radius=d('min_radius'),
         output_crop=d('output_crop')):
         super(FaceSwapping, self).__init__(
-            resolution, crop_scale, gpus, cpu_only, display, verbose,
+            resolution, crop_scale, gpus, cpu_only, display, verbose, encoder_codec,
             detection_model=detection_model, det_batch_size=det_batch_size, det_postfix=det_postfix,
             iou_thresh=iou_thresh, min_length=min_length, min_size=min_size, center_kernel=center_kernel,
             size_kernel=size_kernel, smooth_det=smooth_det, seq_postfix=seq_postfix, write_empty=write_empty,
@@ -157,7 +157,7 @@ class FaceSwapping(VideoProcessBase):
 
         # Initialize video writer
         self.video_renderer = FaceSwappingRenderer(self.display, self.verbose, self.output_crop, self.resolution,
-                                                   self.crop_scale)
+                                                   self.crop_scale, encoder_codec)
         self.video_renderer.start()
 
     def __del__(self):
@@ -186,7 +186,7 @@ class FaceSwapping(VideoProcessBase):
         optimizer = optim.Adam(self.Gr.parameters(), lr=self.finetune_lr, betas=(0.5, 0.999))
 
         # For each batch in the training data
-        for i, (img, landmarks) in enumerate(tqdm(train_loader, unit='batches')):
+        for i, (img, landmarks) in enumerate(tqdm(train_loader, unit='batches', file=sys.stdout)):
             # Prepare input
             with torch.no_grad():
                 # For each view images and landmarks
@@ -358,7 +358,8 @@ class FaceSwapping(VideoProcessBase):
 
 
 class FaceSwappingRenderer(VideoRenderer):
-    def __init__(self, display=False, verbose=0, output_crop=False, resolution=256, crop_scale=1.2):
+    def __init__(self, display=False, verbose=0, output_crop=False, resolution=256, crop_scale=1.2,
+                 encoder_codec='avc1'):
         self._appearance_map = None
         self._fig = None
         self._figsize = (24, 16)
@@ -373,7 +374,8 @@ class FaceSwappingRenderer(VideoRenderer):
             self._appearance_map_size = (int(np.round(height * fig_ratio)), height)
             verbose_size = (self._appearance_map_size[0] + resolution * 2, self._appearance_map_size[1])
 
-        super(FaceSwappingRenderer, self).__init__(display, verbose, verbose_size, output_crop, resolution, crop_scale)
+        super(FaceSwappingRenderer, self).__init__(display, verbose, verbose_size, output_crop, resolution, crop_scale,
+                                                   encoder_codec)
 
     def on_render(self, *args):
         if self._verbose <= 0:
@@ -447,7 +449,7 @@ def transfer_mask(img1, img2, mask):
 def main(source, target, output=None, select_source=d('select_source'), select_target=d('select_target'),
          # General arguments
          resolution=d('resolution'), crop_scale=d('crop_scale'), gpus=d('gpus'),
-         cpu_only=d('cpu_only'), display=d('display'), verbose=d('verbose'),
+         cpu_only=d('cpu_only'), display=d('display'), verbose=d('verbose'), encoder_codec=d('encoder_codec'),
          # Detection arguments:
          detection_model=d('detection_model'), det_batch_size=d('det_batch_size'), det_postfix=d('det_postfix'),
          # Sequence arguments:
@@ -473,7 +475,7 @@ def main(source, target, output=None, select_source=d('select_source'), select_t
          blending_model=d('blending_model'), criterion_id=d('criterion_id'), min_radius=d('min_radius'),
          output_crop=d('output_crop')):
     face_swapping = FaceSwapping(
-        resolution, crop_scale, gpus, cpu_only, display, verbose,
+        resolution, crop_scale, gpus, cpu_only, display, verbose, encoder_codec,
         detection_model=detection_model, det_batch_size=det_batch_size, det_postfix=det_postfix,
         iou_thresh=iou_thresh, min_length=min_length, min_size=min_size, center_kernel=center_kernel,
         size_kernel=size_kernel, smooth_det=smooth_det, seq_postfix=seq_postfix, write_empty=write_empty,

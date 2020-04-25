@@ -9,6 +9,7 @@ segmentation masks will be computed and cached.
 
 import os
 import argparse
+import sys
 import pickle
 from tqdm import tqdm
 import numpy as np
@@ -46,6 +47,8 @@ general.add_argument('-d', '--display', action='store_true',
                      help='display the rendering')
 general.add_argument('-v', '--verbose', default=0, type=int, metavar='N',
                      help='verbose level')
+general.add_argument('-ec', '--encoder_codec', default='avc1', metavar='STR',
+                     help='encoder codec code')
 
 detection = base_parser.add_argument_group('detection')
 detection.add_argument('-dm', '--detection_model', metavar='PATH', default='../weights/WIDERFace_DSFD_RES152.pth',
@@ -124,7 +127,7 @@ d = parser.get_default
 
 class VideoProcessBase(object):
     def __init__(self, resolution=d('resolution'), crop_scale=d('crop_scale'), gpus=d('gpus'),
-         cpu_only=d('cpu_only'), display=d('display'), verbose=d('verbose'),
+         cpu_only=d('cpu_only'), display=d('display'), verbose=d('verbose'), encoder_codec=d('encoder_codec'),
          # Detection arguments:
          detection_model=d('detection_model'), det_batch_size=d('det_batch_size'), det_postfix=d('det_postfix'),
          # Sequence arguments:
@@ -213,7 +216,8 @@ class VideoProcessBase(object):
             self.smooth_seg = None
 
         # Initialize output videos format
-        self.fourcc = cv2.VideoWriter_fourcc(*'avc1')
+        self.encoder_codec = encoder_codec
+        self.fourcc = cv2.VideoWriter_fourcc(*encoder_codec)
 
     def process_pose(self, input_path, output_dir, seq_file_path):
         if not self.cache_pose:
@@ -245,7 +249,7 @@ class VideoProcessBase(object):
 
             # For each batch of frames in the input video
             seq_poses = []
-            for i, frame in enumerate(tqdm(in_vid_loader, unit='batches')):
+            for i, frame in enumerate(tqdm(in_vid_loader, unit='batches', file=sys.stdout)):
                 frame = frame.to(self.device)
                 poses = self.face_pose(frame).div_(99.)  # Yaw, Pitch, Roll
                 seq_poses.append(poses.cpu().numpy())
@@ -323,7 +327,7 @@ class VideoProcessBase(object):
 
             # For each batch of frames in the input video
             seq_landmarks = []
-            for i, frame in enumerate(tqdm(in_vid_loader, unit='batches')):
+            for i, frame in enumerate(tqdm(in_vid_loader, unit='batches', file=sys.stdout)):
                 frame = frame.to(self.device)
                 H = self.L(frame)
                 landmarks = self.heatmap_encoder(H)
@@ -368,7 +372,7 @@ class VideoProcessBase(object):
                                        drop_last=False, shuffle=False)
 
             # For each batch of frames in the input video
-            pbar = tqdm(in_vid_loader, unit='batches')
+            pbar = tqdm(in_vid_loader, unit='batches', file=sys.stdout)
             prev_segmentation = None
             r = self.smooth_seg.kernel_radius
             encoded_segmentations = []
@@ -451,7 +455,8 @@ class VideoProcessBase(object):
         if not os.path.isfile(first_cropped_path):
             if is_vid:
                 crop_video_sequences_main(input_path, output_dir, seq_file_path, self.seq_postfix, self.resolution,
-                                          self.crop_scale, select='all', disable_tqdm=False)
+                                          self.crop_scale, select='all', disable_tqdm=False,
+                                          encoder_codec=self.encoder_codec)
             else:
                 crop_image_sequences_main(input_path, output_dir, seq_file_path, self.seq_postfix, '.jpg',
                                           self.resolution, self.crop_scale)
@@ -502,7 +507,7 @@ def smooth_poses(poses, kernel_size=5):
 
 
 def main(input, output=d('output'), resolution=d('resolution'), crop_scale=d('crop_scale'), gpus=d('gpus'),
-         cpu_only=d('cpu_only'), display=d('display'), verbose=d('verbose'),
+         cpu_only=d('cpu_only'), display=d('display'), verbose=d('verbose'), encoder_codec=d('encoder_codec'),
          # Detection arguments:
          detection_model=d('detection_model'), det_batch_size=d('det_batch_size'), det_postfix=d('det_postfix'),
          # Sequence arguments:
@@ -520,7 +525,7 @@ def main(input, output=d('output'), resolution=d('resolution'), crop_scale=d('cr
          cache_segmentation=d('cache_segmentation'), smooth_segmentation=d('smooth_segmentation'),
          seg_remove_mouth=d('seg_remove_mouth')):
     video_process = VideoProcessCallable(
-        resolution, crop_scale, gpus, cpu_only, display, verbose,
+        resolution, crop_scale, gpus, cpu_only, display, verbose, encoder_codec,
         detection_model=detection_model, det_batch_size=det_batch_size, det_postfix=det_postfix,
         iou_thresh=iou_thresh, min_length=min_length, min_size=min_size, center_kernel=center_kernel,
         size_kernel=size_kernel, smooth_det=smooth_det, seq_postfix=seq_postfix, write_empty=write_empty,
@@ -538,4 +543,3 @@ def main(input, output=d('output'), resolution=d('resolution'), crop_scale=d('cr
 
 if __name__ == "__main__":
     main(**vars(parser.parse_args()))
-

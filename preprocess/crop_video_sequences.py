@@ -1,4 +1,5 @@
 import os
+import sys
 import pickle
 from tqdm import tqdm
 import numpy as np
@@ -8,7 +9,7 @@ from fsgan.utils.video_utils import Sequence
 
 
 def main(input_path, output_dir=None, cache_path=None, seq_postfix='_dsfd_seq.pkl', resolution=256, crop_scale=2.0,
-         select='all', disable_tqdm=False):
+         select='all', disable_tqdm=False, encoder_codec='avc1'):
     cache_path = os.path.splitext(input_path)[0] + seq_postfix if cache_path is None else cache_path
     if output_dir is None:
         output_dir = os.path.splitext(input_path)[0]
@@ -47,7 +48,7 @@ def main(input_path, output_dir=None, cache_path=None, seq_postfix='_dsfd_seq.pk
 
     # For each sequence initialize output video file
     out_vids = []
-    fourcc = cv2.VideoWriter_fourcc(*'avc1')
+    fourcc = cv2.VideoWriter_fourcc(*encoder_codec)
     for seq in seq_list:
         curr_vid_name = os.path.splitext(os.path.basename(input_path))[0] + '_seq%02d.mp4' % seq.id
         curr_vid_path = os.path.join(output_dir, curr_vid_name)
@@ -56,7 +57,7 @@ def main(input_path, output_dir=None, cache_path=None, seq_postfix='_dsfd_seq.pk
     # For each frame in the target video
     cropped_detections = [[] for seq in seq_list]
     cropped_landmarks = [[] for seq in seq_list]
-    pbar = range(total_frames) if disable_tqdm else tqdm(range(total_frames))
+    pbar = range(total_frames) if disable_tqdm else tqdm(range(total_frames), file=sys.stdout)
     for i in pbar:
         ret, frame = cap.read()
         if frame is None:
@@ -139,6 +140,8 @@ if __name__ == "__main__":
                         help='selection method [all|longest]')
     parser.add_argument('-dt', '--disable_tqdm', dest='disable_tqdm', action='store_true',
                           help='if specified disables tqdm progress bar')
+    parser.add_argument('-ec', '--encoder_codec', default='avc1', metavar='STR',
+                        help='encoder codec code')
     args = parser.parse_args()
     main(args.input, args.output, args.cache, args.seq_postfix, args.resolution, args.crop_scale, args.select,
-         args.disable_tqdm)
+         args.disable_tqdm, args.encoder_codec)
